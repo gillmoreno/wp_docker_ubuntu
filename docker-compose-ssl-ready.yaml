@@ -1,0 +1,82 @@
+version: '3'
+
+services:
+
+  db:
+    image: mysql:8.0
+    container_name: db
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - MYSQL_DATABASE=wordpress
+    volumes:
+      - dbdata:/var/lib/mysql
+    command: '--default-authentication-plugin=mysql_native_password'
+    networks:
+      - app-network
+    depends_on:
+      - allow_big_uploads
+  
+  allow_big_uploads:
+    image: mysql:8.0
+    command: "echo 'max_allowed_packet=500M' >> /etc/mysql/my.cnf"
+  app:
+    depends_on:
+    - db
+    image: wordpress:php7.4-fpm-alpine
+    container_name: app
+    restart: unless-stopped
+    env_file: .env
+    environment:
+    - WORDPRESS_DB_HOST=db:3306
+    - WORDPRESS_DB_USER=$MYSQL_USER
+    - WORDPRESS_DB_PASSWORD=$MYSQL_PASSWORD
+    - WORDPRESS_DB_NAME=wordpress
+    volumes:
+    - app:/var/www/html
+    networks:
+    - app-network
+
+  webserver:
+    depends_on:
+    - app
+    - use_real_domain_name
+    image: nginx:1.23
+    container_name: webserver
+    restart: unless-stopped
+    ports:
+    - "80:80"
+    - "443:443"
+    volumes:
+    - app:/var/www/html
+    - ./nginx-conf-ssl-ready:/etc/nginx/conf.d
+    - certbot-etc:/etc/letsencrypt
+    networks:
+    - app-network
+
+  use_real_domain_name:
+    image: nginx:1.23
+    env_file: .env
+    command: 'sed -i "s/example.com/$DOMAIN/g" /etc/nginx/conf.d/nginx.conf'
+    volumes:
+    - ./nginx-conf-ssl-ready:/etc/nginx/conf.d
+
+  certbot:
+    depends_on:
+    - webserver
+    image: certbot/certbot
+    container_name: certbot
+    env_file: .env
+    volumes:
+    - certbot-etc:/etc/letsencrypt
+    - app:/var/www/html
+    command: certonly --webroot --webroot-path=/var/www/html --email $CERTBOT_EMAIL --agree-tos --no-eff-email --force-renewal -d $DOMAIN
+
+volumes:
+  certbot-etc:
+  app:
+  dbdata:
+
+networks:
+  app-network:
+    driver: bridge
