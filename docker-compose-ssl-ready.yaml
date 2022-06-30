@@ -11,15 +11,10 @@ services:
       - MYSQL_DATABASE=wordpress
     volumes:
       - dbdata:/var/lib/mysql
+      - ./my.cnf:/etc/mysql/my.cnf
     command: '--default-authentication-plugin=mysql_native_password'
     networks:
       - app-network
-    depends_on:
-      - allow_big_uploads
-  
-  allow_big_uploads:
-    image: mysql:8.0
-    command: "echo 'max_allowed_packet=500M' >> /etc/mysql/my.cnf"
   app:
     depends_on:
     - db
